@@ -73,6 +73,11 @@ bool timeout_happened = false;
 bool debug_mode = false;
 std::mutex debug_log_mutex;
 
+bool toppled = false;
+bool reset_if_toppled = false;
+int reset_countdown_seconds = 3;
+long double time_toppled = 0;
+
 using namespace std::literals::chrono_literals;
 
 long double getElapsedTime() {
@@ -319,6 +324,9 @@ void animation(){
     double current_time = getElapsedTime();
     delta_time = current_time-ref_time;
     update_delta_time = current_time-update_ref_time;
+
+    bool topple_event;
+
     if (delta_time > 1.0/FPS){
         if (myBot.phi < 0.00001 && myBot.phi > -0.00001 && myBot.phip < 0.00001 && myBot.phip > -0.00001){
             std::cout<<"Evertything is zero."<<std::endl;
@@ -333,14 +341,41 @@ void animation(){
             posz += (-dst*sin(myBot.psi));
             timeoutCorrection();
         } else if (myBot.phi > 0.785){
+            topple_event = true;
             myBot.phi = 2.03;
         } else {
+            topple_event = true;
             myBot.phi = -2.03;
         }
         ref_time = getElapsedTime();
         if (timeout_happened == false) update_ref_time = getElapsedTime();
         influxdbwriter.Write(myBot.phi, timeout_happened, update_delta_time);
         timeout_happened = false;
+
+        // If toppled, start reset countdown
+        if (topple_event && !toppled){
+            time_toppled = current_time;
+            toppled = true;
+            // Log reset countdown start
+            std::ostringstream reset_message;
+            reset_message <<  "Robot toppled over. Resetting in " << reset_countdown_seconds << " seconds...";
+            debugLog(reset_message.str());
+        }
+        // Reset if countdown complete
+        if (reset_if_toppled && toppled && (current_time - time_toppled >= reset_countdown_seconds)) {
+
+            // Reset robot
+            initPIDs();
+            myBot.phi = 0;
+            myBot.phip = 0;
+            toppled = false;
+            topple_event = false;
+
+            // Log reset complete
+            std::ostringstream reset_done_message;
+            reset_done_message <<  "Robot reset complete.";
+            debugLog(reset_done_message.str());
+        }
     }
 }
 
