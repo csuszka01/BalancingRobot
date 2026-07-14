@@ -93,6 +93,7 @@ std::string lowerString(std::string value) {
     return value;
 }
 
+// TODO: needs enum return value for different loglevel implementation
 bool parseDebugFlag(const char* value) {
     if (value == nullptr) {
         return false;
@@ -325,7 +326,7 @@ void animation(){
     delta_time = current_time-ref_time;
     update_delta_time = current_time-update_ref_time;
 
-    bool topple_event;
+    bool topple_event = false; // If robot fell over in current iteration
 
     if (delta_time > 1.0/FPS){
         if (myBot.phi < 0.00001 && myBot.phi > -0.00001 && myBot.phip < 0.00001 && myBot.phip > -0.00001){
@@ -353,7 +354,7 @@ void animation(){
         timeout_happened = false;
 
         // If toppled, start reset countdown
-        if (topple_event && !toppled){
+        if (reset_if_toppled && topple_event && !toppled){
             time_toppled = current_time;
             toppled = true;
             // Log reset countdown start
@@ -399,10 +400,25 @@ int main(int argc, char **argv)
         debug_mode = parseDebugFlag(argv[3]);
     }
     dt = 1.0f / FPS;
+    // Auto reset via env var
+    const char* auto_reset_env = std::getenv("RESET_COUNTDOWN_SECONDS");
+    if (auto_reset_env != nullptr) {
+        reset_if_toppled = true;
+        reset_countdown_seconds = std::atoll(auto_reset_env);
+    }
+    // Auto reset via cli arg
+    if (argc > 4){
+        reset_if_toppled = true;
+        reset_countdown_seconds = std::atoll(argv[4]);
+    }
     std::ostringstream config_message;
     config_message << "debug enabled response_timeout_ms=" << response_timeout
                    << " FPS=" << FPS
-                   << " dt=" << static_cast<double>(dt);
+                   << " dt=" << static_cast<double>(dt)
+                   << " auto_reset=" << reset_if_toppled;
+    if (reset_if_toppled) {
+        config_message << " reset_countdown_seconds=" << reset_countdown_seconds;
+    }
     debugLog(config_message.str());
     // std::thread correctionThread(threadCorrection);
     srand((unsigned)time(0));
