@@ -348,11 +348,6 @@ void animation(){
             topple_event = true;
             myBot.phi = -2.03;
         }
-        ref_time = getElapsedTime();
-        if (timeout_happened == false) update_ref_time = getElapsedTime();
-        influxdbwriter.Write(myBot.phi, timeout_happened, update_delta_time);
-        timeout_happened = false;
-
         // If toppled, start reset countdown
         if (reset_if_toppled && topple_event && !toppled){
             time_toppled = current_time;
@@ -377,6 +372,11 @@ void animation(){
             reset_done_message <<  "Robot reset complete.";
             debugLog(reset_done_message.str());
         }
+
+        ref_time = getElapsedTime();
+        if (timeout_happened == false) update_ref_time = getElapsedTime();
+        influxdbwriter.Write(myBot.phi, timeout_happened, update_delta_time);
+        timeout_happened = false;
     }
 }
 
