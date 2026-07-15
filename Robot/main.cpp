@@ -379,12 +379,15 @@ void animation(){
             myBot.phi = -2.03;
         }
         // If toppled, start reset countdown
-        if (reset_if_toppled && topple_event && !toppled){
+        if (topple_event && !toppled){
             time_toppled = current_time;
             toppled = true;
             // Log reset countdown start
             std::ostringstream reset_message;
-            reset_message <<  "Robot toppled over. Resetting in " << reset_countdown_seconds << " seconds...";
+            reset_message <<  "Robot fell over. Phi=" << myBot.phi;
+            if (reset_if_toppled) {
+            reset_message << " Resetting in " << reset_countdown_seconds << " seconds...";
+            }
             debugLog(reset_message.str());
         }
         // Reset if robot is toppled and ( countdown complete or reset triggered via HTTP )
