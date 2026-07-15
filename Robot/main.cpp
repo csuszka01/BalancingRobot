@@ -4,23 +4,25 @@
 #include <mutex>
 #include <condition_variable>
 
-#include <stdio.h>
+//#include <stdio.h>
 #include <math.h>
 #include <thread>
 #include <unistd.h>
 #include <limits.h>
 #include <cstdlib>
 #include <cctype>
-#include <sstream>
+//#include <sstream>
 #include <string>
 #include "ibalancingbot.cpp"
-#include "pid.cpp"
+//#include "json.hpp"
+//#include "pid.cpp"
 #include "http_pid.cpp"
 #include "influxdbwriter.cpp"
 #define M_PI 3.14159265358979323846 /* pi */
 
 #include "httplib.h"
 #include <atomic>
+#include "logger.h"
 
 long double ref_time = 0.0;
 long double update_ref_time = 0.0;
@@ -73,8 +75,8 @@ HTTP_PID myPIDx = HTTP_PID("http://10.44.0.7:5000/pid");
 HTTP_PID myPIDpsi = HTTP_PID("http://10.44.0.7:5000/pid");
 InfluxDBWriter influxdbwriter;
 bool timeout_happened = false;
-bool debug_mode = false;
-std::mutex debug_log_mutex;
+Logger::LogLevel active_log_level = Logger::LogLevel::DEBUG;
+//std::mutex debug_log_mutex;
 
 bool toppled = false;
 bool reset_if_toppled = false;
@@ -121,25 +123,16 @@ bool parseDebugFlag(const char* value) {
            normalized == "yes" || normalized == "on";
 }
 
-void debugLog(const std::string& message) {
-    if (!debug_mode) {
-        return;
-    }
-
-    std::lock_guard<std::mutex> lock(debug_log_mutex);
-    std::cerr << "[robot-debug t=" << static_cast<double>(getElapsedTime())
-              << "s] " << message << std::endl;
-}
-
 long double timedPidUpdate(const std::string& axis,
                            HTTP_PID& pid,
                            long double current_value) {
-    std::ostringstream start_message;
-    start_message << "PID " << axis << " request start"
-                  << " current_value=" << static_cast<double>(current_value)
-                  << " update_delta_time=" << static_cast<double>(update_delta_time)
-                  << " expected_dt=" << static_cast<double>(dt);
-    debugLog(start_message.str());
+    
+    Logger::debug("PID request start", {
+        {"axis", axis},
+        {"current_value", static_cast<double>(current_value)},
+        {"updated_delta_time", static_cast<double>(update_delta_time)},
+        {"expected_dt",  static_cast<double>(dt)}
+    });
 
     auto request_start = std::chrono::high_resolution_clock::now();
     try {
@@ -148,32 +141,34 @@ long double timedPidUpdate(const std::string& axis,
         std::chrono::duration<long double, std::milli> duration =
             request_end - request_start;
 
-        std::ostringstream success_message;
-        success_message << "PID " << axis << " request ok"
-                        << " duration_ms=" << static_cast<double>(duration.count())
-                        << " result=" << static_cast<double>(result);
-        debugLog(success_message.str());
+        Logger::debug("PID request ok", {
+            {"axis", axis},
+            {"duration_ms", static_cast<double>(duration.count())},
+            {"result", static_cast<double>(result)}
+        });
         return result;
     } catch (const std::exception& error) {
         auto request_end = std::chrono::high_resolution_clock::now();
         std::chrono::duration<long double, std::milli> duration =
             request_end - request_start;
 
-        std::ostringstream error_message;
-        error_message << "PID " << axis << " request exception"
-                      << " duration_ms=" << static_cast<double>(duration.count())
-                      << " error=\"" << error.what() << "\"";
-        debugLog(error_message.str());
+        Logger::error("PID request exception", {
+            {"axis", axis},
+            {"duration_ms", static_cast<double>(duration.count())},
+            {"error", error.what()},
+            {"action", "throw"}
+        });
         throw;
     } catch (...) {
         auto request_end = std::chrono::high_resolution_clock::now();
         std::chrono::duration<long double, std::milli> duration =
             request_end - request_start;
 
-        std::ostringstream error_message;
-        error_message << "PID " << axis << " request unknown exception"
-                      << " duration_ms=" << static_cast<double>(duration.count());
-        debugLog(error_message.str());
+        Logger::error("PID request unknown exception", {
+            {"axis", axis},
+            {"duration_ms", static_cast<double>(duration.count())},
+            {"action", "throw"}
+        });
         throw;
     }
 }
@@ -200,9 +195,9 @@ void initPIDs()
 
 void correction()
 {
-    std::ostringstream start_message;
-    start_message << "correction start timeout_ms=" << response_timeout;
-    debugLog(start_message.str());
+    Logger::debug("correcction start", {
+        {"timeout_ms", response_timeout}
+    });
 
     auto m = std::make_shared<std::mutex>();
     auto cv = std::make_shared<std::condition_variable>();
@@ -248,18 +243,19 @@ void correction()
         }
         //Cetches JSON parse error, and sleeps until the timeout passes
         catch (const std::exception& error) {
-            std::ostringstream message;
-            message << "correction worker catch exception=\""
-                    << error.what() << "\" sleep_ms=" << response_timeout;
-            debugLog(message.str());
+            Logger::error("correction worker exception", {
+                {"error", error.what()},
+                {"action", "sleep"},
+                {"sleep_ms", response_timeout}
+            });
             std::this_thread::sleep_for(std::chrono::milliseconds(response_timeout));
             //std::this_thread::sleep_for(5ms);
         }
         catch (...) {
-            std::ostringstream message;
-            message << "correction worker catch unknown exception sleep_ms="
-                    << response_timeout;
-            debugLog(message.str());
+            Logger::error("correction worker unknown exception", {
+                {"action", "sleep"},
+                {"sleep_ms", response_timeout}
+            });
             std::this_thread::sleep_for(std::chrono::milliseconds(response_timeout));
             //std::this_thread::sleep_for(5ms);
         } });
@@ -270,10 +266,10 @@ void correction()
     // if(cv.wait_for(l, 20ms) == std::cv_status::timeout) {
     if (!cv->wait_for(l, std::chrono::milliseconds(response_timeout), [&finished]() { return *finished; }))
     {
-        std::ostringstream timeout_message;
-        timeout_message << "correction wait result main_thread_timeout=true"
-                        << " timeout_ms=" << response_timeout;
-        debugLog(timeout_message.str());
+        Logger::warn("correction wait result", {
+            {"main_thread_timeout", "true"},
+            {"timeout_ms", response_timeout}
+        });
         // t.join();
         // printf("runtime_error timeout\n");
         // throw std::runtime_error("Timeout");
@@ -282,7 +278,9 @@ void correction()
         throw std::exception();
         // throw std::runtime_error("Timeout");
     }
-    debugLog("correction wait result main_thread_timeout=false");
+    Logger::debug("correction wait result", {
+    {"main_thread_timeout", "false"}
+    });
     /*myPIDx = copyMyPIDx;
     myPIDpsi = copyMyPIDpsi;
     myPIDphi = copyMyPIDphi;
@@ -319,7 +317,9 @@ void timeoutCorrection()
     // catch(std::runtime_error& e) {
     catch (...)
     {
-        debugLog("timeoutCorrection catch: restoring PID state and motor forces");
+        Logger::warn("timeoutCorrection exception", {
+            {"action", "restoring PID state and motor forces"}
+        });
         // printf("runtime_error timeout\n");
         std::this_thread::sleep_for(10ms);
         timeout_happened = true;
@@ -360,7 +360,9 @@ void animation(){
 
     if (delta_time > 1.0/FPS){
         if (myBot.phi < 0.00001 && myBot.phi > -0.00001 && myBot.phip < 0.00001 && myBot.phip > -0.00001){
-            std::cout<<"Evertything is zero."<<std::endl;
+            Logger::info("All axis values zero.", {
+                {"action", "init robot"}
+            });
             myBot.initRobot();
         }
 
@@ -383,12 +385,12 @@ void animation(){
             time_toppled = current_time;
             toppled = true;
             // Log reset countdown start
-            std::ostringstream reset_message;
-            reset_message <<  "Robot fell over. Phi=" << myBot.phi;
-            if (reset_if_toppled) {
-            reset_message << " Resetting in " << reset_countdown_seconds << " seconds...";
-            }
-            debugLog(reset_message.str());
+            
+            Logger::warn("robot fell over", {
+                {"phi", myBot.phi},
+                {"auto_reset_enabled", reset_if_toppled},
+                {"reset_countdown_seconds", reset_countdown_seconds}
+            });
         }
         // Reset if robot is toppled and ( countdown complete or reset triggered via HTTP )
         if (toppled && (reset_if_toppled && (current_time - time_toppled >= reset_countdown_seconds) || trigger_reset)) {
@@ -396,15 +398,13 @@ void animation(){
             reset_robot();
             topple_event = false;
             // Log reset complete
-            std::ostringstream reset_done_message;
-            reset_done_message <<  "Robot reset complete.";
-            debugLog(reset_done_message.str());
+            Logger::info("robot reset complete");
         }
 
         if (toppled) {
-            std::ostringstream toppled_message;
-            toppled_message <<  "Robot fell over. Phi=" << myBot.phi;
-            debugLog(toppled_message.str());
+            Logger::debug("robot fell over", {
+                {"phi", myBot.phi}
+            });
         }
 
         ref_time = getElapsedTime();
@@ -414,6 +414,45 @@ void animation(){
     }
 }
 
+//Parse cli args and env vars
+void parse_args(int argc, char **argv){
+    // HTTP response timeout ms
+    if (argc > 2)
+    {
+        response_timeout = std::atoll(argv[1]);
+        FPS = std::atoll(argv[2]);
+    }
+    // Log level
+    const char* log_level_env = std::getenv("LOG_LEVEL");
+    if (log_level_env != nullptr) {
+        active_log_level = Logger::parse_level(log_level_env);
+        Logger::set_level(active_log_level);
+    }
+    if (argc > 3) {
+        active_log_level = Logger::parse_level(argv[3]);
+        Logger::set_level(active_log_level);
+    }
+    // Auto reset
+    const char* auto_reset_env = std::getenv("RESET_COUNTDOWN_SECONDS");
+    if (auto_reset_env != nullptr) {
+        reset_if_toppled = true;
+        reset_countdown_seconds = std::atoll(auto_reset_env);
+    }
+    if (argc > 4){
+        reset_if_toppled = true;
+        reset_countdown_seconds = std::atoll(argv[4]);
+    }
+
+    Logger::info("robot config", {
+        {"response_timeout_ms", response_timeout},
+        {"FPS", FPS},
+        {"dt", static_cast<double>(dt)},
+        {"auto_reset_enabled", reset_if_toppled},
+        {"reset_countdown_seconds", reset_countdown_seconds},
+        {"log_level", Logger::to_string(active_log_level)}
+    });
+}
+
 int main(int argc, char **argv)
 {
     char hostname[HOST_NAME_MAX];
@@ -421,39 +460,12 @@ int main(int argc, char **argv)
     // influxdbwriter = InfluxDBWriter(std::string("http://influxdb.default.svc.cluster.local:8086"), std::string("robot"));
     influxdbwriter = InfluxDBWriter(std::string("http://influxdb.default.svc.cluster.local:8086"), std::string("robot"), std::string(hostname));
     // influxdbwriter = InfluxDBWriter("http://influxdb.default.svc.cluster.local:8086", "robot", hostname);
-    if (argc > 2)
-    {
-        response_timeout = std::atoll(argv[1]);
-        FPS = std::atoll(argv[2]);
-    }
-    const char* debug_env = std::getenv("ROBOT_DEBUG");
-    if (debug_env != nullptr) {
-        debug_mode = parseDebugFlag(debug_env);
-    }
-    if (argc > 3) {
-        debug_mode = parseDebugFlag(argv[3]);
-    }
+
+    //parse cli and env
+    parse_args(argc, argv);
+
     dt = 1.0f / FPS;
-    // Auto reset via env var
-    const char* auto_reset_env = std::getenv("RESET_COUNTDOWN_SECONDS");
-    if (auto_reset_env != nullptr) {
-        reset_if_toppled = true;
-        reset_countdown_seconds = std::atoll(auto_reset_env);
-    }
-    // Auto reset via cli arg
-    if (argc > 4){
-        reset_if_toppled = true;
-        reset_countdown_seconds = std::atoll(argv[4]);
-    }
-    std::ostringstream config_message;
-    config_message << "debug enabled response_timeout_ms=" << response_timeout
-                   << " FPS=" << FPS
-                   << " dt=" << static_cast<double>(dt)
-                   << " auto_reset=" << reset_if_toppled;
-    if (reset_if_toppled) {
-        config_message << " reset_countdown_seconds=" << reset_countdown_seconds;
-    }
-    debugLog(config_message.str());
+    
     // std::thread correctionThread(threadCorrection);
     srand((unsigned)time(0));
     initPIDs();
@@ -461,7 +473,14 @@ int main(int argc, char **argv)
     // Start the HTTP server for on-demand reset
     std::thread server_thread(run_http_server);
     server_thread.detach();
-    debugLog("HTTP Server listening on port 8080");
+    Logger::info("HTTP Server listening", {
+    {"port", 8080},
+    {"endpoint", {
+        {"path", "/reset"},
+        {"request_type", "POST"}
+            }
+        }
+    });
 
     while (1){
         animation();
