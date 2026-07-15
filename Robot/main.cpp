@@ -187,8 +187,9 @@ void correction()
     start_message << "correction start timeout_ms=" << response_timeout;
     debugLog(start_message.str());
 
-    std::mutex m;
-    std::condition_variable cv;
+    auto m = std::make_shared<std::mutex>();
+    auto cv = std::make_shared<std::condition_variable>();
+    auto finished = std::make_shared<bool>(false);
 
     // correctionReturnStruct ret;
     HTTP_PID copyMyPIDx(myPIDx);
@@ -200,7 +201,7 @@ void correction()
     copyF[1] = F[1];
 
     // std::thread t([&cv, &copyMyPIDx, &copyMyPIDpsi, &copyMyPIDphi, &copyRotation, &copyF]() {
-    std::thread t([&cv]()
+    std::thread t([cv, m, finished]()
                   {
         try {
             long double pidx_value = timedPidUpdate("x", myPIDx, myBot.xp);  // Pid over linear a speed
@@ -222,7 +223,11 @@ void correction()
             /*if(!(rand()%20)) {
                 std::this_thread::sleep_for(11ms);
             }*/
-            cv.notify_one();
+            {
+                std::lock_guard<std::mutex> lock(*m);
+                *finished = true;
+            }
+            cv->notify_one();
         }
         //Cetches JSON parse error, and sleeps until the timeout passes
         catch (const std::exception& error) {
@@ -244,9 +249,9 @@ void correction()
 
     t.detach();
 
-    std::unique_lock<std::mutex> l(m);
+    std::unique_lock<std::mutex> l(*m);
     // if(cv.wait_for(l, 20ms) == std::cv_status::timeout) {
-    if (cv.wait_for(l, std::chrono::milliseconds(response_timeout)) == std::cv_status::timeout)
+    if (!cv->wait_for(l, std::chrono::milliseconds(response_timeout), [&finished]() { return *finished; }))
     {
         std::ostringstream timeout_message;
         timeout_message << "correction wait result main_thread_timeout=true"
