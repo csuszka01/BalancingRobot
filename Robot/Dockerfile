@@ -2,6 +2,7 @@ FROM influxtmp
 WORKDIR cppapp
 COPY webclient.cpp .
 COPY pid.cpp .
+COPY httplib.h .
 COPY http_pid.cpp .
 COPY ibalancingbot.cpp .
 COPY influxdbwriter.cpp .

@@ -16,8 +16,11 @@ spec:
     spec:
       containers:
       - name: robot
-        image: botondbencs/edfrobotcontainer_ld2:update-pid-openfaas-debug-20260603
+        image: csuszka01/edfrobotcontainer:latest
         imagePullPolicy: Always
+        ports:
+          - containerPort: 8080
+            name: http-reset
         command: ["./myapp","100","100", "true"]  # Substitute timeout and fps here and debug flag
       nodeSelector:
         job: "robot"
