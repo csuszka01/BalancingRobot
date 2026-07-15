@@ -19,6 +19,9 @@
 #include "influxdbwriter.cpp"
 #define M_PI 3.14159265358979323846 /* pi */
 
+#include "httplib.h"
+#include <atomic>
+
 long double ref_time = 0.0;
 long double update_ref_time = 0.0;
 long long response_timeout = 1;
@@ -75,6 +78,7 @@ std::mutex debug_log_mutex;
 
 bool toppled = false;
 bool reset_if_toppled = false;
+std::atomic_bool trigger_reset = false;
 int reset_countdown_seconds = 3;
 long double time_toppled = 0;
 
@@ -91,6 +95,19 @@ std::string lowerString(std::string value) {
         c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
     }
     return value;
+}
+
+//HTTP Server for handling on-demand reset
+void run_http_server() {
+    httplib::Server svr;
+
+    // Listen for POST requests to /reset
+    svr.Post("/reset", [](const httplib::Request&, httplib::Response& res) {
+        trigger_reset = true;
+        res.set_content("Reset initiated\n", "text/plain");
+    });
+
+    svr.listen("0.0.0.0", 8080);
 }
 
 // TODO: needs enum return value for different loglevel implementation
@@ -325,6 +342,14 @@ void threadCorrection()
             }
     }
 }
+void reset_robot(){
+    // Reset robot
+    initPIDs();
+    myBot.phi = 0;
+    myBot.phip = 0;
+    toppled = false;
+    trigger_reset = false;
+}
 
 void animation(){
     double current_time = getElapsedTime();
@@ -362,20 +387,21 @@ void animation(){
             reset_message <<  "Robot toppled over. Resetting in " << reset_countdown_seconds << " seconds...";
             debugLog(reset_message.str());
         }
-        // Reset if countdown complete
-        if (reset_if_toppled && toppled && (current_time - time_toppled >= reset_countdown_seconds)) {
-
+        // Reset if robot is toppled and ( countdown complete or reset triggered via HTTP )
+        if (toppled && (reset_if_toppled && (current_time - time_toppled >= reset_countdown_seconds) || trigger_reset)) {
             // Reset robot
-            initPIDs();
-            myBot.phi = 0;
-            myBot.phip = 0;
-            toppled = false;
+            reset_robot();
             topple_event = false;
-
             // Log reset complete
             std::ostringstream reset_done_message;
             reset_done_message <<  "Robot reset complete.";
             debugLog(reset_done_message.str());
+        }
+
+        if (toppled) {
+            std::ostringstream toppled_message;
+            toppled_message <<  "Robot fell over. Phi=" << myBot.phi;
+            debugLog(toppled_message.str());
         }
 
         ref_time = getElapsedTime();
@@ -428,6 +454,12 @@ int main(int argc, char **argv)
     // std::thread correctionThread(threadCorrection);
     srand((unsigned)time(0));
     initPIDs();
+
+    // Start the HTTP server for on-demand reset
+    std::thread server_thread(run_http_server);
+    server_thread.detach();
+    debugLog("HTTP Server listening on port 8080");
+
     while (1){
         animation();
     }
