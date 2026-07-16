@@ -107,6 +107,9 @@ void run_http_server() {
     svr.Post("/reset", [](const httplib::Request&, httplib::Response& res) {
         trigger_reset = true;
         res.set_content("Reset initiated\n", "text/plain");
+        Logger::info("robot reset initiated", {
+            {"method", "http_reset"}
+        });
     });
 
     svr.listen("0.0.0.0", 8080);
@@ -387,10 +390,14 @@ void animation(){
             // Log reset countdown start
             
             Logger::warn("robot fell over", {
-                {"phi", myBot.phi},
-                {"auto_reset_enabled", reset_if_toppled},
-                {"reset_countdown_seconds", reset_countdown_seconds}
+                {"phi", myBot.phi}
             });
+            if (reset_if_toppled) {
+                Logger::info("robot reset initiated", {
+                    {"method", "auto_reset"},
+                    {"reset_countdown_seconds", reset_countdown_seconds}
+                });
+            }
         }
         // Reset if robot is toppled and ( countdown complete or reset triggered via HTTP )
         if (toppled && (reset_if_toppled && (current_time - time_toppled >= reset_countdown_seconds) || trigger_reset)) {
