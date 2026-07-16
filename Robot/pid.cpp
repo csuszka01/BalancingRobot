@@ -1,6 +1,8 @@
 #ifndef PID_CPP
 #define PID_CPP
 
+#include "json.hpp"
+
 struct PID {
     long double Kp;
     long double Ki;
@@ -58,6 +60,19 @@ struct PID {
 	    I_value = p.I_value;
 	}
 	return *this;
+    }
+
+    nlohmann::json to_json(long double current_value) const {
+        return nlohmann::json::object({
+            {"current_value", current_value},
+            {"set_point", set_point},
+            {"Kp", Kp}, {"Ki", Ki}, {"Kd", Kd},
+            {"Integrator_min", Integrator_min},
+            {"Integrator_max", Integrator_max},
+            {"Integrator", Integrator},
+            {"Derivator", Derivator},
+            {"D_value", D_value}
+        });
     }
 
     virtual long double update(long double current_value, long double dt, long double expected_dt) {

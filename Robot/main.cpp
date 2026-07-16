@@ -16,7 +16,7 @@
 #include "ibalancingbot.cpp"
 //#include "json.hpp"
 //#include "pid.cpp"
-#include "http_pid.cpp"
+#include "http_pid_set.cpp"
 #include "influxdbwriter.cpp"
 #define M_PI 3.14159265358979323846 /* pi */
 
@@ -70,12 +70,15 @@ long double F[] = {0.0, 0.0};
 
 auto start_t = std::chrono::high_resolution_clock::now();
 
-HTTP_PID myPIDphi = HTTP_PID("http://10.44.0.7:5000/pid");
-HTTP_PID myPIDx = HTTP_PID("http://10.44.0.7:5000/pid");
-HTTP_PID myPIDpsi = HTTP_PID("http://10.44.0.7:5000/pid");
+PID myPIDphi = PID();
+PID myPIDx = PID();
+PID myPIDpsi = PID();
+
+HTTP_PID_SET myPIDset = HTTP_PID_SET("http://10.44.0.7:5000/pid", myPIDx, myPIDphi, myPIDpsi);
+
 InfluxDBWriter influxdbwriter;
 bool timeout_happened = false;
-Logger::LogLevel active_log_level = Logger::LogLevel::DEBUG;
+Logger::LogLevel active_log_level = Logger::LogLevel::NONE;
 //std::mutex debug_log_mutex;
 
 bool toppled = false;
@@ -115,20 +118,7 @@ void run_http_server() {
     svr.listen("0.0.0.0", 8080);
 }
 
-// TODO: needs enum return value for different loglevel implementation
-bool parseDebugFlag(const char* value) {
-    if (value == nullptr) {
-        return false;
-    }
-
-    std::string normalized = lowerString(std::string(value));
-    return normalized == "1" || normalized == "true" ||
-           normalized == "yes" || normalized == "on";
-}
-
-long double timedPidUpdate(const std::string& axis,
-                           HTTP_PID& pid,
-                           long double current_value) {
+std::array<long double, 3> timedPidUpdate(HTTP_PID_SET& pids, long double x_val, long double phi_val, long double psi_val) {
     
     Logger::debug("PID request start", {
         {"axis", axis},
@@ -139,7 +129,7 @@ long double timedPidUpdate(const std::string& axis,
 
     auto request_start = std::chrono::high_resolution_clock::now();
     try {
-        long double result = pid.update(current_value, update_delta_time, dt);
+        auto result = pids.update(x_val, phi_val, psi_val, update_delta_time, dt, bot_phi);
         auto request_end = std::chrono::high_resolution_clock::now();
         std::chrono::duration<long double, std::milli> duration =
             request_end - request_start;
@@ -206,38 +196,21 @@ void correction()
     auto cv = std::make_shared<std::condition_variable>();
     auto finished = std::make_shared<bool>(false);
 
-    // correctionReturnStruct ret;
-    HTTP_PID copyMyPIDx(myPIDx);
-    HTTP_PID copyMyPIDpsi(myPIDpsi);
-    HTTP_PID copyMyPIDphi(myPIDphi);
-    long double copyRotation = rotation;
-    long double copyF[2];
-    copyF[0] = F[0];
-    copyF[1] = F[1];
-
     // std::thread t([&cv, &copyMyPIDx, &copyMyPIDpsi, &copyMyPIDphi, &copyRotation, &copyF]() {
     std::thread t([cv, m, finished]()
                   {
         try {
-            long double pidx_value = timedPidUpdate("x", myPIDx, myBot.xp);  // Pid over linear a speed
-            long double pidpsi_value = timedPidUpdate("psi", myPIDpsi, -myBot.psip);  // Pid over psi angular speed rotation
-
-
-            long double tilt = - pidx_value + myBot.phi;
-            rotation = pidpsi_value;
-            //copyRotation = pidpsi_value;
-
-            long double pidphi_value = timedPidUpdate("phi", myPIDphi, tilt);  // pid over the pendulum angle phi
-            //long double pidphi_value = copyMyPIDphi.update(tilt);  // pid over the pendulum angle phi
-
-            F[0] = -pidphi_value-rotation;
-            F[1] = -pidphi_value+rotation;
-            //copyF[0] = -pidphi_value-copyRotation;
-            //copyF[1] = -pidphi_value+copyRotation;
-            // Since there is no webserver, we simulate the missed requests randomly
-            /*if(!(rand()%20)) {
-                std::this_thread::sleep_for(11ms);
-            }*/
+            auto result = timedPidUpdate(myPIDset, myBot.xp, myBot.phi, -myBot.psip);
+            //long double pidx_value = timedPidUpdate("x", myPIDx, myBot.xp);  // Pid over linear a speed
+            //long double pidpsi_value = timedPidUpdate("psi", myPIDpsi, -myBot.psip);  // Pid over psi angular speed rotation
+            //long double tilt = - pidx_value + myBot.phi;
+            rotation = result[2];
+            //long double pidphi_value = timedPidUpdate("phi", myPIDphi, tilt);  // pid over the pendulum angle phi
+            //F[0] = -pidphi_value-rotation;
+            //F[1] = -pidphi_value+rotation;
+            F[0] = -result[0]-rotation;
+            F[1] = -result[0]+rotation;
+            
             {
                 std::lock_guard<std::mutex> lock(*m);
                 *finished = true;
@@ -252,7 +225,6 @@ void correction()
                 {"sleep_ms", response_timeout}
             });
             std::this_thread::sleep_for(std::chrono::milliseconds(response_timeout));
-            //std::this_thread::sleep_for(5ms);
         }
         catch (...) {
             Logger::error("correction worker unknown exception", {
@@ -260,13 +232,12 @@ void correction()
                 {"sleep_ms", response_timeout}
             });
             std::this_thread::sleep_for(std::chrono::milliseconds(response_timeout));
-            //std::this_thread::sleep_for(5ms);
         } });
 
     t.detach();
 
     std::unique_lock<std::mutex> l(*m);
-    // if(cv.wait_for(l, 20ms) == std::cv_status::timeout) {
+    
     if (!cv->wait_for(l, std::chrono::milliseconds(response_timeout), [&finished]() { return *finished; }))
     {
         Logger::warn("correction wait result", {
@@ -284,12 +255,6 @@ void correction()
     Logger::debug("correction wait result", {
     {"main_thread_timeout", "false"}
     });
-    /*myPIDx = copyMyPIDx;
-    myPIDpsi = copyMyPIDpsi;
-    myPIDphi = copyMyPIDphi;
-    rotation = copyRotation;
-    F[0] = copyF[0];
-    F[1] = copyF[1];*/
 }
 
 void timeoutCorrection()
@@ -306,9 +271,10 @@ void timeoutCorrection()
         myPIDpsi.setPoint(turn); // we only want to reset the PID when the rotation changes
     }
 
-    HTTP_PID copyMyPIDx(myPIDx);
-    HTTP_PID copyMyPIDpsi(myPIDpsi);
-    HTTP_PID copyMyPIDphi(myPIDphi);
+    //HTTP_PID copyMyPIDx(myPIDx);
+    //HTTP_PID copyMyPIDpsi(myPIDpsi);
+    //HTTP_PID copyMyPIDphi(myPIDphi);
+    HTTP_PID_SET copyMyPIDset(myPIDset);
     long double copyRotation = rotation;
     long double copyF[2];
     copyF[0] = F[0];
@@ -326,9 +292,10 @@ void timeoutCorrection()
         // printf("runtime_error timeout\n");
         std::this_thread::sleep_for(10ms);
         timeout_happened = true;
-        myPIDx = copyMyPIDx;
-        myPIDpsi = copyMyPIDpsi;
-        myPIDphi = copyMyPIDphi;
+        //myPIDx = copyMyPIDx;
+        //myPIDpsi = copyMyPIDpsi;
+        //myPIDphi = copyMyPIDphi;
+        myPIDset = copyMyPIDset;
         rotation = copyRotation;
         F[0] = copyF[0];
         F[1] = copyF[1];
