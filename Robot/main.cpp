@@ -121,23 +121,27 @@ void run_http_server() {
 std::array<long double, 3> timedPidUpdate(HTTP_PID_SET& pids, long double x_val, long double phi_val, long double psi_val) {
     
     Logger::debug("PID request start", {
-        {"axis", axis},
-        {"current_value", static_cast<double>(current_value)},
         {"updated_delta_time", static_cast<double>(update_delta_time)},
         {"expected_dt",  static_cast<double>(dt)}
     });
 
     auto request_start = std::chrono::high_resolution_clock::now();
     try {
-        auto result = pids.update(x_val, phi_val, psi_val, update_delta_time, dt, bot_phi);
+        auto result = pids.update(x_val, phi_val, psi_val, update_delta_time, dt);
         auto request_end = std::chrono::high_resolution_clock::now();
         std::chrono::duration<long double, std::milli> duration =
             request_end - request_start;
 
+        // phi value for logs
+        long double PID_x = result[0];
+        long double true_phi_current = -PID_x + phi_val; 
+
         Logger::debug("PID request ok", {
-            {"axis", axis},
             {"duration_ms", static_cast<double>(duration.count())},
-            {"result", static_cast<double>(result)}
+            {"result_x", static_cast<double>(result[0])},
+            {"result_phi", static_cast<double>(result[1])},
+            {"result_psi", static_cast<double>(result[2])},
+            {"phi_current_used", static_cast<double>(true_phi_current)} // Logged here
         });
         return result;
     } catch (const std::exception& error) {
@@ -146,7 +150,6 @@ std::array<long double, 3> timedPidUpdate(HTTP_PID_SET& pids, long double x_val,
             request_end - request_start;
 
         Logger::error("PID request exception", {
-            {"axis", axis},
             {"duration_ms", static_cast<double>(duration.count())},
             {"error", error.what()},
             {"action", "throw"}
@@ -158,7 +161,6 @@ std::array<long double, 3> timedPidUpdate(HTTP_PID_SET& pids, long double x_val,
             request_end - request_start;
 
         Logger::error("PID request unknown exception", {
-            {"axis", axis},
             {"duration_ms", static_cast<double>(duration.count())},
             {"action", "throw"}
         });
@@ -201,15 +203,11 @@ void correction()
                   {
         try {
             auto result = timedPidUpdate(myPIDset, myBot.xp, myBot.phi, -myBot.psip);
-            //long double pidx_value = timedPidUpdate("x", myPIDx, myBot.xp);  // Pid over linear a speed
-            //long double pidpsi_value = timedPidUpdate("psi", myPIDpsi, -myBot.psip);  // Pid over psi angular speed rotation
-            //long double tilt = - pidx_value + myBot.phi;
-            rotation = result[2];
-            //long double pidphi_value = timedPidUpdate("phi", myPIDphi, tilt);  // pid over the pendulum angle phi
-            //F[0] = -pidphi_value-rotation;
-            //F[1] = -pidphi_value+rotation;
-            F[0] = -result[0]-rotation;
-            F[1] = -result[0]+rotation;
+            
+            rotation = result[2]; // psi term
+            
+            F[0] = -result[1]-rotation; // -phi_term - psi_term
+            F[1] = -result[1]+rotation; // -phi_term + psi_term
             
             {
                 std::lock_guard<std::mutex> lock(*m);
