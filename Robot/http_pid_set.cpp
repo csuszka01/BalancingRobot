@@ -62,9 +62,9 @@ struct HTTP_PID_SET {
                 throw std::runtime_error("Dt was 0, no data returned");
             }
         if (!return_data.contains("x") || !return_data.contains("phi") || !return_data.contains("psi")) {
-            throw std::runtime_error("Server response lacks expected PID keys!");
+            throw std::runtime_error("Server response lacks expected PID keys! Raw response: " + return_data.dump());
         }
-        
+
         PIDx.error = return_data["x"]["error"];
         PIDx.P_value = return_data["x"]["P_value"];
         PIDx.I_value = return_data["x"]["I_value"];
