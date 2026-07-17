@@ -1,4 +1,4 @@
-#include <iostream>
+//#include <iostream>
 #include <chrono>
 #include <thread>
 #include <mutex>
@@ -246,7 +246,7 @@ void correction()
         // printf("runtime_error timeout\n");
         // throw std::runtime_error("Timeout");
         // t.join();
-        std::cout << response_timeout << std::endl;
+        //std::cout << response_timeout << std::endl;
         throw std::exception();
         // throw std::runtime_error("Timeout");
     }

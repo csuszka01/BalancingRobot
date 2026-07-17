@@ -87,9 +87,6 @@ struct HTTP_PID_SET {
         long double PIDphi_value = return_data["phi"]["PID"];
         long double PIDpsi_value = return_data["psi"]["PID"];
 
-        //long double rotation = PIDpsi_value;
-
-        //return {-PIDphi_value-rotation, -PIDphi_value+rotation};
         return {PIDx_value, PIDphi_value, PIDpsi_value};
     }
 };
