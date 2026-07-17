@@ -39,7 +39,7 @@ def calculate_single_pid(pid_data, current_value, dt, alpha):
 
 def handle(req):
     d = json.loads(req)
-    error = d["set_point"] - d["current_value"]
+    #error = d["set_point"] - d["current_value"]
 
     #Filtered Derivative term
     dt = d["dt"]
