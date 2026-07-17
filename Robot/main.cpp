@@ -172,20 +172,20 @@ void initPIDs()
 {
     // Function that initializes the PIDs parameters (Kp, Ki, Kd)
 
-    myPIDphi.setKp(7.0);
-    myPIDphi.setKi(0.1);
-    myPIDphi.setKd(6.0);
-    myPIDphi.setPoint(0);
+    myPIDset.PIDphi.setKp(7.0);
+    myPIDset.PIDphi.setKi(0.1);
+    myPIDset.PIDphi.setKd(6.0);
+    myPIDset.PIDphi.setPoint(0);
 
-    myPIDx.setKp(0.01);
-    myPIDx.setKi(0.05 * dt);
-    myPIDx.setKd(0.1 * dt);
-    myPIDx.setPoint(0);
+    myPIDset.PIDx.setKp(0.01);
+    myPIDset.PIDx.setKi(0.05 * dt);
+    myPIDset.PIDx.setKd(0.1 * dt);
+    myPIDset.PIDx.setPoint(0);
 
-    myPIDpsi.setKp(1);
-    myPIDpsi.setKi(1);
-    myPIDpsi.setKd(0);
-    myPIDpsi.setPoint(0);
+    myPIDset.PIDpsi.setKp(1);
+    myPIDset.PIDpsi.setKi(1);
+    myPIDset.PIDpsi.setKd(0);
+    myPIDset.PIDpsi.setPoint(0);
 }
 
 void correction()

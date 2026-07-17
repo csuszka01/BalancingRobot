@@ -5,15 +5,12 @@
 #include "webclient.cpp"
 #include <time.h>
 #include <string>
-#include <sstream>
-#include <iostream>
 #include <stdexcept>
 #include <utility>
 #include "json.hpp"
 #include <array>
 
 using json = nlohmann::json;
-using std::to_string;
 
 struct HTTP_PID_SET {
     std::string serveraddr;

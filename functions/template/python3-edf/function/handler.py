@@ -9,6 +9,11 @@ def calculate_single_pid(pid_data, current_value, dt, alpha):
     P_value = pid_data["Kp"] * error
     # Filtered Derivative
     previous_error = pid_data["Derivator"]
+
+    # potential fix for large x and phi values
+    if (previous_error == 0):
+        previous_error = error
+
     raw_derivative = (error - previous_error) / dt
     D_value = (1.0 - alpha) * pid_data["D_value"] + alpha * raw_derivative
     D_term = pid_data["Kd"] * D_value
