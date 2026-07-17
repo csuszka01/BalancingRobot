@@ -49,9 +49,12 @@ namespace Logger {
     //ISO 8601 UTC timestamp
     inline std::string get_timestamp() {
         auto now = std::chrono::system_clock::now();
+        auto duration = now.time_since_epoch();
+        auto millis = std::chrono::duration_cast<std::chrono::milliseconds>(duration).count() % 1000;
         auto in_time_t = std::chrono::system_clock::to_time_t(now);
         std::stringstream ss;
-        ss << std::put_time(std::gmtime(&in_time_t), "%Y-%m-%dT%H:%M:%SZ");
+        ss << std::put_time(std::gmtime(&in_time_t), "%Y-%m-%dT%H:%M:%S");
+        ss << '.' << std::setfill('0') << std::setw(3) << millis << 'Z';
         return ss.str();
     }
 
