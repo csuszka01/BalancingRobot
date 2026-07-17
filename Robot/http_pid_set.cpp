@@ -58,6 +58,13 @@ struct HTTP_PID_SET {
         catch (json::parse_error& error) {
             throw std::runtime_error("parse error");
         }
+        if (return_data.contains("error")) {
+                throw std::runtime_error("Dt was 0, no data returned");
+            }
+        if (!return_data.contains("x") || !return_data.contains("phi") || !return_data.contains("psi")) {
+            throw std::runtime_error("Server response lacks expected PID keys!");
+        }
+        
         PIDx.error = return_data["x"]["error"];
         PIDx.P_value = return_data["x"]["P_value"];
         PIDx.I_value = return_data["x"]["I_value"];
