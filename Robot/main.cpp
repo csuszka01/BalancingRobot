@@ -81,10 +81,16 @@ bool timeout_happened = false;
 Logger::LogLevel active_log_level = Logger::LogLevel::NONE;
 //std::mutex debug_log_mutex;
 
+enum HTTP_REQUEST_METHOD {
+    SINGLE,
+    SEPARATE,
+};
+
 bool toppled = false;
 bool reset_if_toppled = false;
 std::atomic_bool trigger_reset = false;
-int reset_countdown_seconds = 3;
+HTTP_REQUEST_METHOD http_request_method = SINGLE;
+int reset_countdown_seconds = 0;
 long double time_toppled = 0;
 
 using namespace std::literals::chrono_literals;
@@ -100,6 +106,20 @@ std::string lowerString(std::string value) {
         c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
     }
     return value;
+}
+
+HTTP_REQUEST_METHOD parse_http_request_method(std::string value){
+    auto lower = lowerString(value);
+    if (lower == "single" || lower == "1" || lower == "one") {
+        return SINGLE;
+    }
+    if (lower == "separate" || lower == "3" || lower == "three") {
+        return SEPARATE;
+    }
+    Logger::warn("Invalid HTTP_REQUEST_METHOD", {
+        {"action", "fallback to SINGLE request mode"}
+    });
+    return SINGLE;
 }
 
 //HTTP Server for handling on-demand reset
@@ -118,7 +138,54 @@ void run_http_server() {
     svr.listen("0.0.0.0", 8080);
 }
 
-std::array<long double, 3> timedPidUpdate(HTTP_PID_SET& pids, long double x_val, long double phi_val, long double psi_val) {
+long double timedPidUpdate(const std::string& axis,
+                           PID& pid,
+                           long double current_value) {
+    Logger::debug("PID request start", {
+        {"updated_delta_time", static_cast<double>(update_delta_time)},
+        {"expected_dt",  static_cast<double>(dt)},
+        {"axis", axis},
+        {"current_Value", static_cast<double>(current_value)}
+    });
+
+    auto request_start = std::chrono::high_resolution_clock::now();
+    try {
+        long double result = myPIDset.update_axis(pid, current_value, update_delta_time, dt);
+        auto request_end = std::chrono::high_resolution_clock::now();
+        std::chrono::duration<long double, std::milli> duration =
+            request_end - request_start;
+
+        Logger::debug("PID request ok", {
+            {"duration_ms", static_cast<double>(duration.count())},
+            {"axis", axis},
+            {"result", static_cast<double>(result)}
+        });
+        return result;
+    } catch (const std::exception& error) {
+        auto request_end = std::chrono::high_resolution_clock::now();
+        std::chrono::duration<long double, std::milli> duration =
+            request_end - request_start;
+
+        Logger::error("PID request exception", {
+            {"duration_ms", static_cast<double>(duration.count())},
+            {"error", error.what()},
+            {"action", "throw"}
+        });
+        throw;
+    } catch (...) {
+        auto request_end = std::chrono::high_resolution_clock::now();
+        std::chrono::duration<long double, std::milli> duration =
+            request_end - request_start;
+
+        Logger::error("PID request unknown exception", {
+            {"duration_ms", static_cast<double>(duration.count())},
+            {"action", "throw"}
+        });
+        throw;
+    }
+}
+
+std::array<long double, 3> timedPidSetUpdate(HTTP_PID_SET& pids, long double x_val, long double phi_val, long double psi_val) {
     
     Logger::debug("PID request start", {
         {"updated_delta_time", static_cast<double>(update_delta_time)},
@@ -202,7 +269,19 @@ void correction()
     std::thread t([cv, m, finished]()
                   {
         try {
-            auto result = timedPidUpdate(myPIDset, myBot.xp, myBot.phi, -myBot.psip);
+            std::array<long double, 3> result;
+            // Single HTTP request mode
+            if (http_request_method == SINGLE) {
+                result = timedPidSetUpdate(myPIDset, myBot.xp, myBot.phi, -myBot.psip);
+            // Original separate HTTP requests mode
+            } else {
+                long double pidx_value = timedPidUpdate("x", myPIDset.PIDx, myBot.xp);  // Pid over linear a speed
+                long double pidpsi_value = timedPidUpdate("psi", myPIDset.PIDphi, -myBot.psip);  // Pid over psi angular speed rotation
+                long double tilt = - pidx_value + myBot.phi;
+                long double pidphi_value = timedPidUpdate("phi", myPIDset.PIDphi, tilt);  // pid over the pendulum angle phi
+
+                result = {pidx_value, pidphi_value, pidpsi_value};
+            }
             
             rotation = result[2]; // psi term
             
@@ -242,13 +321,7 @@ void correction()
             {"main_thread_timeout", "true"},
             {"timeout_ms", response_timeout}
         });
-        // t.join();
-        // printf("runtime_error timeout\n");
-        // throw std::runtime_error("Timeout");
-        // t.join();
-        //std::cout << response_timeout << std::endl;
         throw std::exception();
-        // throw std::runtime_error("Timeout");
     }
     Logger::debug("correction wait result", {
     {"main_thread_timeout", "false"}
@@ -300,16 +373,6 @@ void timeoutCorrection()
     }
 }
 
-void threadCorrection()
-{
-    while (true)
-    {
-        // if (glutGet(GLUT_ELAPSED_TIME)-ref_time > (1.0/FPS)*1000) {
-            if (getElapsedTime()-ref_time > 1.0/FPS) {
-                correction();
-            }
-    }
-}
 void reset_robot(){
     // Reset robot
     initPIDs();
@@ -404,15 +467,23 @@ void parse_args(int argc, char **argv){
         active_log_level = Logger::parse_level(argv[3]);
         Logger::set_level(active_log_level);
     }
+    // HTTP request method (single / separate)
+    if (argc > 4) {
+        http_request_method = parse_http_request_method(argv[4]);
+    }
+    const char* http_request_method_env = std::getenv("HTTP_REQUEST_METHOD");
+    if (http_request_method_env != nullptr) {
+        http_request_method = parse_http_request_method(http_request_method_env);
+    }
     // Auto reset
     const char* auto_reset_env = std::getenv("RESET_COUNTDOWN_SECONDS");
     if (auto_reset_env != nullptr) {
         reset_if_toppled = true;
         reset_countdown_seconds = std::atoll(auto_reset_env);
     }
-    if (argc > 4){
+    if (argc > 5){
         reset_if_toppled = true;
-        reset_countdown_seconds = std::atoll(argv[4]);
+        reset_countdown_seconds = std::atoll(argv[5]);
     }
 
     Logger::info("robot config", {
@@ -421,7 +492,8 @@ void parse_args(int argc, char **argv){
         {"dt", static_cast<double>(dt)},
         {"auto_reset_enabled", reset_if_toppled},
         {"reset_countdown_seconds", reset_countdown_seconds},
-        {"log_level", Logger::to_string(active_log_level)}
+        {"log_level", Logger::to_string(active_log_level)},
+        {"http_request_method", http_request_method}
     });
 }
 

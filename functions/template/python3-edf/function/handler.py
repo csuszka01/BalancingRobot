@@ -54,6 +54,15 @@ def handle(req):
     tau = 3 * d["expected_dt"]
     alpha = dt / (dt + tau)
 
+    # Request mode: Single / Separate
+    http_request_mode = d["http_request_mode"]
+    if http_request_mode == 0:
+        handle_single(d, dt, alpha) # single http request for all axis
+    else:
+        calculate_single_pid(d, d["current_value"], dt, alpha) # separate http request for each axis
+
+def handle_single(d, dt, alpha):
+
     pids = d["pids"]
     
     # 1. Calculate X
