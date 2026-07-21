@@ -35,6 +35,7 @@ struct HTTP_PID_SET {
         timespec_get(&ts, TIME_UTC);
 
         json data = json::object({
+            {"http_request_mode", 0}, // single http request mode  for updating all axis at once
             {"time", 1000000000 * ts.tv_sec + ts.tv_nsec},
             {"dt", dt},
             {"expected_dt", expected_dt},
@@ -95,6 +96,7 @@ struct HTTP_PID_SET {
         struct timespec ts;
         timespec_get(&ts, CLOCK_TAI);
         json data = json::object({
+                        {"http_request_mode", 1}, //update single axis
                         {"time", 1000000000*ts.tv_sec+ts.tv_nsec},
                         {"current_value", current_value},
                         {"expected_dt", expected_dt},

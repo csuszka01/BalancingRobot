@@ -276,7 +276,7 @@ void correction()
             // Original separate HTTP requests mode
             } else {
                 long double pidx_value = timedPidUpdate("x", myPIDset.PIDx, myBot.xp);  // Pid over linear a speed
-                long double pidpsi_value = timedPidUpdate("psi", myPIDset.PIDphi, -myBot.psip);  // Pid over psi angular speed rotation
+                long double pidpsi_value = timedPidUpdate("psi", myPIDset.PIDpsi, -myBot.psip);  // Pid over psi angular speed rotation
                 long double tilt = - pidx_value + myBot.phi;
                 long double pidphi_value = timedPidUpdate("phi", myPIDset.PIDphi, tilt);  // pid over the pendulum angle phi
 
@@ -341,10 +341,7 @@ void timeoutCorrection()
         current_turn = turn;
         myPIDpsi.setPoint(turn); // we only want to reset the PID when the rotation changes
     }
-
-    //HTTP_PID copyMyPIDx(myPIDx);
-    //HTTP_PID copyMyPIDpsi(myPIDpsi);
-    //HTTP_PID copyMyPIDphi(myPIDphi);
+    // copy pidset current value, so it can be restored in an event of a timeout
     HTTP_PID_SET copyMyPIDset(myPIDset);
     long double copyRotation = rotation;
     long double copyF[2];
@@ -354,27 +351,22 @@ void timeoutCorrection()
     {
         correction();
     }
-    // catch(std::runtime_error& e) {
+    // restore previous saved pidset state
     catch (...)
     {
         Logger::warn("timeoutCorrection exception", {
             {"action", "restoring PID state and motor forces"}
         });
-        // printf("runtime_error timeout\n");
         std::this_thread::sleep_for(10ms);
         timeout_happened = true;
-        //myPIDx = copyMyPIDx;
-        //myPIDpsi = copyMyPIDpsi;
-        //myPIDphi = copyMyPIDphi;
         myPIDset = copyMyPIDset;
         rotation = copyRotation;
         F[0] = copyF[0];
         F[1] = copyF[1];
     }
 }
-
+// Reset robot if toppled
 void reset_robot(){
-    // Reset robot
     initPIDs();
     myBot.phi = 0;
     myBot.phip = 0;
@@ -390,6 +382,7 @@ void animation(){
     bool topple_event = false; // If robot fell over in current iteration
 
     if (delta_time > 1.0/FPS){
+        // if robot becomes almost perfectly balanced, initrobot() pushes it slightly out of balance
         if (myBot.phi < 0.00001 && myBot.phi > -0.00001 && myBot.phip < 0.00001 && myBot.phip > -0.00001){
             Logger::info("All axis values zero.", {
                 {"action", "init robot"}
@@ -403,6 +396,8 @@ void animation(){
             dst = (myBot.xp * delta_time);
             posx += dst*cos(myBot.psi);
             posz += (-dst*sin(myBot.psi));
+            // start of pidserver call process 
+            //  timeoutCorrection() -> correction() -> timedPidsetUpdate() -> myPIDset.update() -> HTTP request to pidserver
             timeoutCorrection();
         } else if (myBot.phi > 0.785){
             topple_event = true;
@@ -416,7 +411,6 @@ void animation(){
             time_toppled = current_time;
             toppled = true;
             // Log reset countdown start
-            
             Logger::warn("robot fell over", {
                 {"phi", myBot.phi}
             });
