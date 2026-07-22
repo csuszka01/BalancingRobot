@@ -1,7 +1,7 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: robot
+  name: robot-base
   labels:
     app: robot
 spec:
@@ -21,6 +21,6 @@ spec:
         ports:
           - containerPort: 8080
             name: http-reset
-        command: ["./myapp","100","100", "info","single"]  # Substitute timeout and fps here and debug flag
+        command: ["./myapp","100","100", "info","three"]  # Substitute timeout and fps here and debug flag
       nodeSelector:
         job: "robot"

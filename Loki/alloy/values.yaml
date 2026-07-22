@@ -1,0 +1,75 @@
+alloy:
+  configMap:
+    content: |
+      // 1. Discover all pods running in the Kubernetes cluster
+      discovery.kubernetes "pods" {
+        role = "pod"
+      }
+
+      // 2. Filter targets specifically for app=robot and extract K8s metadata
+      discovery.relabel "robot_pods" {
+        targets = discovery.kubernetes.pods.targets
+
+        // --- FILTER RULE ---
+        // Keeps ONLY pods that have the label app=robot
+        rule {
+          source_labels = ["__meta_kubernetes_pod_label_app"]
+          action        = "keep"
+          regex         = "robot"
+        }
+
+        // Attach clean labels to log entries
+        rule {
+          source_labels = ["__meta_kubernetes_namespace"]
+          target_label  = "namespace"
+        }
+        rule {
+          source_labels = ["__meta_kubernetes_pod_name"]
+          target_label  = "pod"
+        }
+        rule {
+          source_labels = ["__meta_kubernetes_pod_container_name"]
+          target_label  = "container"
+        }
+        rule {
+          source_labels = ["__meta_kubernetes_pod_label_app"]
+          target_label  = "app"
+        }
+        rule {
+          source_labels = ["__meta_kubernetes_node_name"]
+          target_label  = "node"
+        }
+      }
+
+      // 3. Tail stdout log files from node disk for matching pods
+      loki.source.kubernetes "pod_logs" {
+        targets    = discovery.relabel.robot_pods.output
+        forward_to = [loki.process.json_parser.receiver]
+      }
+
+      // 4. Process and parse the C++ JSON logs
+      loki.process "json_parser" {
+        // Extract top-level fields (including nanosecond time)
+        stage.json {
+          expressions = {
+            raw_time = "time",
+            mode     = "http_request_mode",
+            dt       = "dt",
+          }
+        }
+
+        // Parse C++ nanosecond timestamp (1000000000 * tv_sec + tv_nsec)
+        stage.timestamp {
+          source = "raw_time"
+          format = "unix_ns"
+        }
+
+        forward_to = [loki.write.endpoint.receiver]
+      }
+
+      // 5. Send processed logs to Loki Gateway
+      loki.write "endpoint" {
+        endpoint {
+          url = "http://loki-gateway.logging.svc.cluster.local/loki/api/v1/push"
+        }
+      }

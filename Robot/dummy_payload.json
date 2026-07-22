@@ -1,0 +1,43 @@
+{
+  "time": 1784293655000000000,
+  "dt": 0.01,
+  "expected_dt": 0.01,
+  "pids": {
+    "x": {
+      "current_value": 1.23,
+      "set_point": 1.0,
+      "Kp": 1.5,
+      "Ki": 0.05,
+      "Kd": 0.1,
+      "Integrator_min": -10.0,
+      "Integrator_max": 10.0,
+      "Integrator": 0.12,
+      "Derivator": -0.01,
+      "D_value": -0.02
+    },
+    "phi": {
+      "current_value": 0.45,
+      "set_point": 0.0,
+      "Kp": 2.0,
+      "Ki": 0.1,
+      "Kd": 0.2,
+      "Integrator_min": -5.0,
+      "Integrator_max": 5.0,
+      "Integrator": 0.01,
+      "Derivator": 0.0,
+      "D_value": 0.0
+    },
+    "psi": {
+      "current_value": -0.12,
+      "set_point": 0.0,
+      "Kp": 2.0,
+      "Ki": 0.1,
+      "Kd": 0.2,
+      "Integrator_min": -5.0,
+      "Integrator_max": 5.0,
+      "Integrator": -0.03,
+      "Derivator": 0.02,
+      "D_value": 0.04
+    }
+  }
+}

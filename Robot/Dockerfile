@@ -3,7 +3,8 @@ WORKDIR cppapp
 COPY webclient.cpp .
 COPY pid.cpp .
 COPY httplib.h .
-COPY http_pid.cpp .
+COPY logger.h .
+COPY http_pid_set.cpp .
 COPY ibalancingbot.cpp .
 COPY influxdbwriter.cpp .
 COPY json.hpp .
