@@ -25,7 +25,7 @@ struct InfluxDBWriter {
         db->write(influxdb::Point{"angle"}.addTag("robotname",robotname).addField("timeout", timeout_happened ? 1 : 0).addField("value",angle).addField("delta_time",delta_time));
     }
     void WriteRtt(float rtt, bool timeout_happened, float delta_time){
-        db->write(influxdb::Point{"rtt"}.addTag("robotname",robotname).addField("timeout", timeout_happened ? 1 : 0).addField("value",angle).addField("delta_time",delta_time));
+        db->write(influxdb::Point{"rtt"}.addTag("robotname",robotname).addField("timeout", timeout_happened ? 1 : 0).addField("value",rtt).addField("delta_time",delta_time));
     }
 };
 
