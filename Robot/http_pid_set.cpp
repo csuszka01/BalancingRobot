@@ -123,11 +123,13 @@ struct HTTP_PID_SET {
         
         //std::stringstream ss(wc.getResponse());
         json return_data;
+        std::string response;
         try {
-            return_data = json::parse(wc.getResponse());
-        }
+            response = wc.getResponse();
+            return_data = json::parse(response); }
         catch (json::parse_error& error) {
-            throw std::runtime_error("parse error");
+            std::string err = error.what() + response;
+            throw std::runtime_error(err);
         }
         pid.error = return_data["error"];
         pid.P_value = return_data["P_value"];
