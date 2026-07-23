@@ -53,6 +53,10 @@ struct HTTP_PID_SET {
         std::string response;
         try {
             response = wc.getResponse();
+            if (response.empty()) {
+                throw std::runtime_error("Server response empty");
+            }
+
             return_data = json::parse(response); }
         catch (json::parse_error& error) {
             std::string err = error.what() + response;
@@ -128,6 +132,9 @@ struct HTTP_PID_SET {
         std::string response;
         try {
             response = wc.getResponse();
+            if (response.empty()) {
+                throw std::runtime_error("Server response empty");
+            }
             return_data = json::parse(response); }
         catch (json::parse_error& error) {
             std::string err = error.what() + response;

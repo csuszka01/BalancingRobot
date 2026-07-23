@@ -69,6 +69,7 @@ bool use_pid = true;
 long double F[] = {0.0, 0.0};
 
 auto start_t = std::chrono::high_resolution_clock::now();
+std::chrono::duration<long double, std::milli> rtt;
 
 PID myPIDphi = PID();
 PID myPIDx = PID();
@@ -107,6 +108,8 @@ std::string lowerString(std::string value) {
     }
     return value;
 }
+
+long double rad_to_deg(long double rad){ return rad * (180 / M_PI); }
 
 HTTP_REQUEST_METHOD parse_http_request_method(std::string value){
     auto lower = lowerString(value);
@@ -152,33 +155,30 @@ long double timedPidUpdate(const std::string& axis,
     try {
         long double result = myPIDset.update_axis(pid, current_value, update_delta_time, dt);
         auto request_end = std::chrono::high_resolution_clock::now();
-        std::chrono::duration<long double, std::milli> duration =
-            request_end - request_start;
+        rtt = request_end - request_start;
 
         Logger::debug("PID request ok", {
-            {"duration_ms", static_cast<double>(duration.count())},
+            {"duration_ms", static_cast<double>(rtt.count())},
             {"axis", axis},
             {"result", static_cast<double>(result)}
         });
         return result;
     } catch (const std::exception& error) {
         auto request_end = std::chrono::high_resolution_clock::now();
-        std::chrono::duration<long double, std::milli> duration =
-            request_end - request_start;
+        rtt = request_end - request_start;
 
         Logger::error("PID request exception", {
-            {"duration_ms", static_cast<double>(duration.count())},
+            {"duration_ms", static_cast<double>(rtt.count())},
             {"error", error.what()},
             {"action", "throw"}
         });
         throw;
     } catch (...) {
         auto request_end = std::chrono::high_resolution_clock::now();
-        std::chrono::duration<long double, std::milli> duration =
-            request_end - request_start;
+        rtt = request_end - request_start;
 
         Logger::error("PID request unknown exception", {
-            {"duration_ms", static_cast<double>(duration.count())},
+            {"duration_ms", static_cast<double>(rtt.count())},
             {"action", "throw"}
         });
         throw;
@@ -196,15 +196,14 @@ std::array<long double, 3> timedPidSetUpdate(HTTP_PID_SET& pids, long double x_v
     try {
         auto result = pids.update(x_val, phi_val, psi_val, update_delta_time, dt);
         auto request_end = std::chrono::high_resolution_clock::now();
-        std::chrono::duration<long double, std::milli> duration =
-            request_end - request_start;
+        rtt = request_end - request_start;
 
         // phi value for logs
         long double PID_x = result[0];
         long double true_phi_current = -PID_x + phi_val; 
 
         Logger::debug("PID request ok", {
-            {"duration_ms", static_cast<double>(duration.count())},
+            {"duration_ms", static_cast<double>(rtt.count())},
             {"result_x", static_cast<double>(result[0])},
             {"result_phi", static_cast<double>(result[1])},
             {"result_psi", static_cast<double>(result[2])},
@@ -213,22 +212,20 @@ std::array<long double, 3> timedPidSetUpdate(HTTP_PID_SET& pids, long double x_v
         return result;
     } catch (const std::exception& error) {
         auto request_end = std::chrono::high_resolution_clock::now();
-        std::chrono::duration<long double, std::milli> duration =
-            request_end - request_start;
+        rtt = request_end - request_start;
 
         Logger::error("PID request exception", {
-            {"duration_ms", static_cast<double>(duration.count())},
+            {"duration_ms", static_cast<double>(rtt.count())},
             {"error", error.what()},
             {"action", "throw"}
         });
         throw;
     } catch (...) {
         auto request_end = std::chrono::high_resolution_clock::now();
-        std::chrono::duration<long double, std::milli> duration =
-            request_end - request_start;
+        rtt = request_end - request_start;
 
         Logger::error("PID request unknown exception", {
-            {"duration_ms", static_cast<double>(duration.count())},
+            {"duration_ms", static_cast<double>(rtt.count())},
             {"action", "throw"}
         });
         throw;
@@ -438,7 +435,11 @@ void animation(){
 
         ref_time = getElapsedTime();
         if (timeout_happened == false) update_ref_time = getElapsedTime();
-        influxdbwriter.Write(myBot.phi, timeout_happened, update_delta_time);
+        // write tilt in deg to db
+        long double tilt_deg = rad_to_deg(myBot.phi);
+        influxdbwriter.WriteAngle(tilt_deg, timeout_happened, update_delta_time);
+        // write rtt to db
+        influxdbwriter.WriteRtt(rtt.count(), timeout_happened, delta_time);
         timeout_happened = false;
     }
 }
