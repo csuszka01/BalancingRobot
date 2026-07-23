@@ -50,11 +50,13 @@ struct HTTP_PID_SET {
         wc.post(to_string(data));
 
         json return_data;
+        std::string response;
         try {
-            return_data = json::parse(wc.getResponse());
-        }
+            response = wc.getResponse();
+            return_data = json::parse(response); }
         catch (json::parse_error& error) {
-            throw std::runtime_error("parse error");
+            std::string err = error.what() + response;
+            throw std::runtime_error(err);
         }
         if (return_data.contains("error")) {
                 throw std::runtime_error("Dt was 0, no data returned");
