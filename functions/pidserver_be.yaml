@@ -6,7 +6,7 @@ functions:
   pidserver:
     lang: python3-edf
     handler: ./pidserver
-    image: botondbencs/edf-pidserver:latest
+    image: csuszka01/pidserver:latest
     annotations:
       com.openfaas.k8s.node-selector: "kubernetes.io/hostname=beta"
 
