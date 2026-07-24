@@ -3,7 +3,6 @@
 
 #include <curl/curl.h>
 #include <string>
-#include <iostream>
 #include <mutex>
 
 std::mutex mtx;

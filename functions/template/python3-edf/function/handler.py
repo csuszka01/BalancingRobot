@@ -11,14 +11,14 @@ def calculate_single_pid(pid_data, current_value, dt, alpha):
     previous_error = pid_data["Derivator"]
 
     # potential fix for large x and phi values
-    if (previous_error == 0):
-        previous_error = error
+    #if (previous_error == 0):
+    #    previous_error = error
 
     raw_derivative = (error - previous_error) / dt
     D_value = (1.0 - alpha) * pid_data["D_value"] + alpha * raw_derivative
     D_term = pid_data["Kd"] * D_value
     # Integrator
-    Integrator = pid_data["Integrator"] + error * dt
+    Integrator = pid_data["Integrator"] + 0.5 * (error + previous_error) * dt
     
     # Clamp Integrator
     if Integrator > pid_data["Integrator_max"]:
