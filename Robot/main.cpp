@@ -71,11 +71,11 @@ long double F[] = {0.0, 0.0};
 auto start_t = std::chrono::high_resolution_clock::now();
 std::chrono::duration<long double, std::milli> rtt;
 
-PID myPIDphi = PID();
-PID myPIDx = PID();
-PID myPIDpsi = PID();
+//PID myPIDphi = PID();
+//PID myPIDx = PID();
+//PID myPIDpsi = PID();
 
-HTTP_PID_SET myPIDset = HTTP_PID_SET("http://10.44.0.7:5000/pid", myPIDx, myPIDphi, myPIDpsi);
+HTTP_PID_SET myPIDset = HTTP_PID_SET("http://10.44.0.7:5000/pid", PID(), PID(), PID());
 
 InfluxDBWriter influxdbwriter;
 bool timeout_happened = false;
@@ -330,13 +330,13 @@ void timeoutCorrection()
     if (current_speed != speed)
     {
         current_speed = speed;
-        myPIDx.setPoint(speed); // we only want to reset the PID when the speed changes
+        myPIDset.PIDx.setPoint(speed); // we only want to reset the PID when the speed changes
     }
 
     if (current_turn != turn)
     {
         current_turn = turn;
-        myPIDpsi.setPoint(turn); // we only want to reset the PID when the rotation changes
+        myPIDset.PIDpsi.setPoint(turn); // we only want to reset the PID when the rotation changes
     }
     // copy pidset current value, so it can be restored in an event of a timeout
     HTTP_PID_SET copyMyPIDset(myPIDset);
