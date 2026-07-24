@@ -27,7 +27,7 @@
 long double ref_time = 0.0;
 long double update_ref_time = 0.0;
 long long response_timeout = 1;
-int FPS = 10;
+int FPS = 100;
 long double dt = 1.0f / FPS;
 long double delta_time;
 long double update_delta_time;
@@ -395,7 +395,29 @@ void animation(){
             posz += (-dst*sin(myBot.psi));
             // start of pidserver call process 
             //  timeoutCorrection() -> correction() -> timedPidsetUpdate() -> myPIDset.update() -> HTTP request to pidserver
-            timeoutCorrection();
+            auto t0 = std::chrono::high_resolution_clock::now();
+
+            timeoutCorrection(); // Calls PID server
+
+            auto t1 = std::chrono::high_resolution_clock::now();
+
+            // write tilt in deg to db
+            long double tilt_deg = rad_to_deg(myBot.phi);
+            influxdbwriter.WriteAngle(tilt_deg, timeout_happened, update_delta_time);
+            // write rtt to db
+            influxdbwriter.WriteRtt(rtt.count(), timeout_happened, delta_time);
+
+            auto t2 = std::chrono::high_resolution_clock::now();
+
+            std::chrono::duration<double, std::milli> pid_time = t1 - t0;
+            std::chrono::duration<double, std::milli> influx_time = t2 - t1;
+
+            if (pid_time.count() > 30.0) {
+                Logger::warn("Loop slowdown detected!", {
+                    {"pid_ms", pid_time.count()},
+                    {"influx_ms", influx_time.count()}
+                });
+            }
         } else if (myBot.phi > 0.785){
             topple_event = true;
             myBot.phi = 2.03;
@@ -435,11 +457,7 @@ void animation(){
 
         ref_time = getElapsedTime();
         if (timeout_happened == false) update_ref_time = getElapsedTime();
-        // write tilt in deg to db
-        long double tilt_deg = rad_to_deg(myBot.phi);
-        influxdbwriter.WriteAngle(tilt_deg, timeout_happened, update_delta_time);
-        // write rtt to db
-        influxdbwriter.WriteRtt(rtt.count(), timeout_happened, delta_time);
+        
         timeout_happened = false;
     }
 }
