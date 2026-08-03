@@ -53,4 +53,4 @@ if __name__ == '__main__':
         
     # Enable multithreading so the HTTP server can keep 
     # persistent TCP sockets open without blocking
-    app.run(host="0.0.0.0", port=5000, threaded=True)
+    app.run(host="127.0.0.1", port=5000, threaded=True)
