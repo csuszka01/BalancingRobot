@@ -512,6 +512,8 @@ void parse_args(int argc, char **argv){
 
 int main(int argc, char **argv)
 {
+    curl_global_init(CURL_GLOBAL_ALL);
+
     char hostname[HOST_NAME_MAX];
     gethostname(hostname, HOST_NAME_MAX);
     // influxdbwriter = InfluxDBWriter(std::string("http://influxdb.default.svc.cluster.local:8086"), std::string("robot"));
@@ -542,4 +544,6 @@ int main(int argc, char **argv)
     while (1){
         animation();
     }
+
+    curl_global_cleanup();
 }

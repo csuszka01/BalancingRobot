@@ -50,9 +50,7 @@ if __name__ == '__main__':
             period   * 1000 * 1000  # time period in nanoseconds
         )
         scheddl.set_deadline(*dl_args)
-        app.run("0.0.0.0", port=5000, threaded=False)
-    else:
-        if not threaded:
-            app.run("0.0.0.0", port=5000, threaded=False)
-        else:
-            app.run("0.0.0.0", port=5000, threaded=False, processes=16)
+        
+    # Enable multithreading so the HTTP server can keep 
+    # persistent TCP sockets open without blocking
+    app.run(host="0.0.0.0", port=5000, threaded=True)
