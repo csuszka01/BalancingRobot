@@ -156,6 +156,7 @@ struct HTTP_PID_SET {
 
 
 //WebClient HTTP_PID::wc = WebClient("http://pidserver.default.svc.cluster.local:5000/pid");
-WebClient HTTP_PID_SET::wc = WebClient("http://pidserver.openfaas-fn.svc.cluster.local:8080/pid");
+//WebClient HTTP_PID_SET::wc = WebClient("http://pidserver.openfaas-fn.svc.cluster.local:8080/pid");
+WebClient HTTP_PID_SET::wc = WebClient("http://gateway.openfaas:8080/function/pidserver");
 
 #endif
